@@ -7,7 +7,7 @@ import type {
 import { type Jwk, schema } from "./schema";
 import { getJwksAdapter } from "./adapter";
 import { getJwtToken } from "./sign";
-import { exportJWK, generateKeyPair, type JWK } from "jose";
+import { exportJWK, generateKeyPair, type JWK, type JWTPayload } from "jose";
 import {
 	createAuthEndpoint,
 	createAuthMiddleware,
@@ -42,6 +42,13 @@ type JWKOptions =
 			crv?: never; // Only P-521 for ES512
 	  };
 
+export type JwtClaim<T extends keyof Pick<JWTPayload, "iss" | "aud" | "sub">> =
+	| JWTPayload[T]
+	| ((session: {
+			user: User & Record<string, any>;
+			session: Session & Record<string, any>;
+	  }) => Promise<JWTPayload[T]> | JWTPayload[T]);
+
 export interface JwtOptions {
 	jwks?: {
 		/**
@@ -66,12 +73,19 @@ export interface JwtOptions {
 	jwt?: {
 		/**
 		 * The issuer of the JWT
+		 * @description If not provided, the base URL of the application will be used as the issuer
 		 */
-		issuer?: string;
+		issuer?: JwtClaim<"iss">;
 		/**
 		 * The audience of the JWT
+		 * @description If not provided, the base URL of the application will be used as the audience
 		 */
-		audience?: string;
+		audience?: JwtClaim<"aud">;
+		/**
+		 * The subject of the JWT
+		 * @description If not provided, the user ID will be used as the subject
+		 */
+		subject?: JwtClaim<"sub">;
 		/**
 		 * Set the "exp" (Expiration Time) Claim.
 		 *
@@ -107,6 +121,7 @@ export interface JwtOptions {
 		 * A function that is called to get the subject of the JWT
 		 *
 		 * @default session.user.id
+		 * @deprecated use `subject` instead
 		 */
 		getSubject?: (session: {
 			user: User & Record<string, any>;

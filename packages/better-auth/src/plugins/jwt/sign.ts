@@ -55,23 +55,39 @@ export async function getJwtToken(
 		options?.jwks?.keyPairConfig?.alg ?? "EdDSA",
 	);
 
+	const session = ctx.context.session!;
+	const baseURL = ctx.context.options.baseURL!;
+
 	const payload = !options?.jwt?.definePayload
-		? ctx.context.session!.user
-		: await options?.jwt.definePayload(ctx.context.session!);
+		? session.user
+		: await options?.jwt.definePayload(session);
+
+	const issuer =
+		typeof options?.jwt?.issuer === "function"
+			? await options.jwt.issuer(session)
+			: options?.jwt?.issuer;
+
+	const audience =
+		typeof options?.jwt?.audience === "function"
+			? await options.jwt.audience(session)
+			: options?.jwt?.audience;
+
+	const subject = options?.jwt?.getSubject
+		? await options.jwt.getSubject(session)
+		: typeof options?.jwt?.subject === "function"
+			? await options.jwt.subject(session)
+			: options?.jwt?.subject;
 
 	const jwt = await new SignJWT(payload)
 		.setProtectedHeader({
 			alg: options?.jwks?.keyPairConfig?.alg ?? "EdDSA",
 			kid: key.id,
 		})
-		.setIssuedAt()
-		.setIssuer(options?.jwt?.issuer ?? ctx.context.options.baseURL!)
-		.setAudience(options?.jwt?.audience ?? ctx.context.options.baseURL!)
+		.setIssuer(issuer ?? baseURL)
+		.setSubject(subject ?? session.user.id)
+		.setAudience(audience ?? baseURL)
 		.setExpirationTime(options?.jwt?.expirationTime ?? "15m")
-		.setSubject(
-			(await options?.jwt?.getSubject?.(ctx.context.session!)) ??
-				ctx.context.session!.user.id,
-		)
+		.setIssuedAt()
 		.sign(privateKey);
 	return jwt;
 }
